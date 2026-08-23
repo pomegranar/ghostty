@@ -59,24 +59,19 @@ pub fn calcForWindow(
     // Please, GNOME, stop this nonsense of making a window ~30% bigger
     // internally than how they really are just for your shadows and
     // rounded corners and all that fluff. Please. I beg of you.
-    const x: Pos, const y: Pos = off: {
-        var x: f64 = 0;
-        var y: f64 = 0;
-        native.getSurfaceTransform(&x, &y);
-        // Slightly inset the corners if we're using CSDs
-        if (csd) {
-            x += 1;
-            y += 1;
-        }
-        break :off .{ @intFromFloat(x), @intFromFloat(y) };
-    };
-
-    var width = @as(Pos, surface.getWidth());
-    var height = @as(Pos, surface.getHeight());
-
-    // Trim off the offsets. Be careful not to get negative.
-    width -= x * 2;
-    height -= y * 2;
+    //
+    // We used to trim the CSD shadow margin (as reported by
+    // gtk_native_get_surface_transform()) off of the blur region, on the
+    // assumption that the margin is purely an invisible shadow gutter.
+    // It isn't: Ghostty's own translucent surface content is drawn all
+    // the way out to the margin, not just inside it. Excluding the
+    // margin from the blur region left a strip along the window's edges
+    // that was translucent (showing the desktop behind it) but never
+    // blurred, since the compositor was never told to blur that strip.
+    // Blurring the full surface bounds instead keeps the blur and the
+    // translucent content in sync.
+    const width = @as(Pos, surface.getWidth());
+    const height = @as(Pos, surface.getHeight());
     if (width <= 0 or height <= 0) return .empty;
 
     // Empirically determined.
@@ -98,8 +93,8 @@ pub fn calcForWindow(
 
     const new_slices = try approxRoundedRect(
         alloc,
-        x,
-        y,
+        0,
+        0,
         width,
         height,
         // See https://gnome.pages.gitlab.gnome.org/libadwaita/doc/main/css-variables.html#window-radius
